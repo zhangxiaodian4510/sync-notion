@@ -1,18 +1,20 @@
 """
 sysnc  memos to notion database.
 """
+import datetime
 import logging
 import time
 import requests
 
 from notion_client import Client
-
+from typing import Optional
 from config import CONFIG
+from datetime import datetime
 
 class MemosItem:
     """
     memos item, format:
-        "id": 3,
+        "uid": 3,
         "rowStatus": "NORMAL",
         "creatorId": 101,
         "createdTs": 1696766005,
@@ -39,17 +41,18 @@ class MemosItem:
         "relationList": []
     """
     def __init__(self, data) -> None:
-        self.id: str = str(data.get('id'))
+        self.id: str = str(data.get('uid'))
         self.row_status: str = data.get('rowStatus')
-        self.creator_id: int = data.get('creatorId')
-        self.created_ts: int  = data.get('createdTs')
-        # self.updated_ts = data.get('updatedTs')
         self.content: str = str(data.get('content'))
         self.visibility: str = str(data.get('visibility'))
         self.pinned: str = str(data.get('pinned'))
         self.parent: str = str(data.get('parent')) # convert to string
-        self.creator_name: str = str(data.get('creatorName'))
-        self.creator_username: str = str(data.get('creatorUsername'))
+        self.creator_name: str = "cherish"
+        time_str = data.get('createTime')
+        time_obj = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
+        normal_time_str = time_obj.strftime("%Y-%m-%d %H:%M:%S")
+        print(normal_time_str) 
+        self.create_time: str = time_obj.strftime("%Y-%m-%d %H:%M:%S")
         # self.creatorUsername = data.get('creatorUsername')
 
 
@@ -70,7 +73,7 @@ def query_page(client: Client, database_id: str, id: int) -> bool:
     return False
 
 
-def insert_page(client: Client, database_id: str, memos: MemosItem) -> None | str:
+def insert_page(client: Client, database_id: str, memos: MemosItem) -> Optional[str]:
     '''插入page'''
     parent = {
         "database_id": database_id,
@@ -81,14 +84,12 @@ def insert_page(client: Client, database_id: str, memos: MemosItem) -> None | st
     properties = {
         "ID": {"title": [{"type": "text", "text": {"content": memos.id}}]},
         "RowStatus": {"rich_text": [{"type": "text", "text": {"content": memos.row_status}}]},
-        "CreatorID": {"number": memos.creator_id},
-        "CreatedTs": {"number": memos.created_ts},
         "Content": {"rich_text": [{"type": "text", "text": {"content": memos.content}}]},
         "Visibility": {"select": {"name": memos.visibility}},
         "Pinned": {"select": {"name": memos.pinned}},
         "Parent": {"rich_text": [{"type": "text", "text": {"content": memos.parent}}]},
         "CreatorName": {"rich_text": [{"type": "text", "text": {"content": memos.creator_name}}]},
-        "CreatorUsername": {"rich_text": [{"type": "text", "text": {"content": memos.creator_username}}]},
+        "CreateTime": {"rich_text": [{"type": "text", "text": {"content": memos.create_time}}]},
     }
     response = client.pages.create(parent=parent, properties=properties)
     return response["id"]
@@ -104,9 +105,9 @@ def _memos_list(offset: int, limit: int, host: str, create_user: str, memos_toke
     }
     result = []
 
-    url = f'{host}/api/v1/memo?'.format(host=host)
+    url = f'{host}/api/v1/memos?'.format(host=host)
     params = {
-        'limit': limit,
+        'pageSize': 20,
         'offset': offset,
         'creatorUsername': create_user,
     }
@@ -120,11 +121,13 @@ def _memos_list(offset: int, limit: int, host: str, create_user: str, memos_toke
         return result
 
     data = rsp.json()
+
     if not data:
         return result
 
-    for item in data:
+    for item in data['memos']:
         result.append(MemosItem(item))
+
 
     return result
 
